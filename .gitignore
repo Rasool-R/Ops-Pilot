@@ -33,3 +33,5 @@ logs/
 *.log
 tmp/
 .opspilot_data/
+
+.history/
