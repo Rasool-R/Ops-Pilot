@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: opspilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opspilot_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-opspilot_db}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - opspilot_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-opspilot_user} -d $${POSTGRES_DB:-opspilot_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  opspilot-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opspilot-app
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-opspilot_user}:${POSTGRES_PASSWORD:-local_dev_password}@postgres:5432/${POSTGRES_DB:-opspilot_db}
+      USE_MOCK_TELEMETRY: ${USE_MOCK_TELEMETRY:-true}
+      REMEDIATION_DRY_RUN_ONLY: ${REMEDIATION_DRY_RUN_ONLY:-true}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - opspilot_net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+volumes:
+  postgres_data:
+    name: opspilot_postgres_data
+
+networks:
+  opspilot_net:
+    name: opspilot_internal_net
+    driver: bridge
