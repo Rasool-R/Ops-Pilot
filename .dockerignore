@@ -1,0 +1,32 @@
+# Git and version control
+.git
+.gitignore
+
+# Virtual environments and Python caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets and local environment files (NEVER copy into image)
+.env
+.env.*
+!.env.example
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Documentation and local logs
+docs/
+logs/
+*.log
+tmp/
