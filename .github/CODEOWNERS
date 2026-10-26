@@ -1,0 +1,27 @@
+# ==============================================================================
+# OpsPilot — Code Ownership Boundaries
+# Rasool: AI, Backend, PostgreSQL App Schema/Migrations/Tests
+# Mohammad: Docker, Monitoring, CI/CD, Infrastructure Operations
+# ==============================================================================
+
+# Shared Contracts & Architecture
+/docs/integration-contracts.md          @rasool @mohammad
+/docs/architecture.md                   @rasool @mohammad
+/docs/decisions/                        @rasool @mohammad
+
+# AI, Backend, and PostgreSQL Application Engineering
+/app/                                   @rasool
+/alembic/                               @rasool
+/alembic.ini                            @rasool
+/evaluation/                            @rasool
+/tests/unit/                            @rasool
+/tests/graph/                           @rasool
+/tests/database/                        @rasool
+
+# DevOps, SRE, Monitoring, and CI/CD Infrastructure
+/Dockerfile                             @mohammad
+/docker-compose.yml                     @mohammad
+/.dockerignore                          @mohammad
+/.github/workflows/                     @mohammad
+/monitoring/                            @mohammad
+/scripts/                               @mohammad
