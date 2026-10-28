@@ -1,10 +1,19 @@
-"""SQLAlchemy ORM models for incidents, alerts, and audit events."""
+"""SQLAlchemy ORM models for incidents, alerts, RCA artifacts, and audit events."""
 
 from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -136,6 +145,24 @@ class Incident(Base):
     alerts: Mapped[list["Alert"]] = relationship(
         "Alert", back_populates="incident", cascade="all, delete-orphan"
     )
+    evidence_records: Mapped[list["EvidenceRecord"]] = relationship(
+        "EvidenceRecord", back_populates="incident", cascade="all, delete-orphan"
+    )
+    hypotheses: Mapped[list["HypothesisRecord"]] = relationship(
+        "HypothesisRecord", back_populates="incident", cascade="all, delete-orphan"
+    )
+    diagnostic_runs: Mapped[list["DiagnosticRun"]] = relationship(
+        "DiagnosticRun", back_populates="incident", cascade="all, delete-orphan"
+    )
+    remediation_proposals: Mapped[list["RemediationProposal"]] = relationship(
+        "RemediationProposal", back_populates="incident", cascade="all, delete-orphan"
+    )
+    report: Mapped["IncidentReport | None"] = relationship(
+        "IncidentReport",
+        back_populates="incident",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
     audit_events: Mapped[list["AuditEvent"]] = relationship(
         "AuditEvent", back_populates="incident", cascade="all, delete-orphan"
     )
@@ -167,6 +194,141 @@ class Alert(Base):
     )
 
     incident: Mapped["Incident"] = relationship("Incident", back_populates="alerts")
+
+
+class EvidenceRecord(Base):
+    """Bounded telemetry observation persisted as verifiable evidence for an incident."""
+
+    __tablename__ = "evidence_records"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "fact_id", name="uq_evidence_incident_fact"),
+        Index("ix_evidence_records_incident_id", "incident_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
+    )
+    fact_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    service_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    signal_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    signal_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    numeric_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    observed_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="evidence_records")
+
+
+class HypothesisRecord(Base):
+    """Persisted candidate hypothesis evaluated during RCA investigation."""
+
+    __tablename__ = "hypotheses"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "hypothesis_id", name="uq_hypothesis_incident_hyp"),
+        Index("ix_hypotheses_incident_id", "incident_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
+    )
+    hypothesis_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    target_service: Mapped[str] = mapped_column(String(64), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    supporting_fact_ids_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    contradicting_fact_ids_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="hypotheses")
+
+
+class DiagnosticRun(Base):
+    """Persisted record of a bounded diagnostic tool call executed by the agent."""
+
+    __tablename__ = "diagnostic_runs"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "step_id", name="uq_diagnostic_incident_step"),
+        Index("ix_diagnostic_runs_incident_id", "incident_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
+    )
+    step_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_service: Mapped[str] = mapped_column(String(64), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    executed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="diagnostic_runs")
+
+
+class RemediationProposal(Base):
+    """Persisted remediation proposal awaiting independent policy and human approval."""
+
+    __tablename__ = "remediation_proposals"
+    __table_args__ = (Index("ix_remediation_proposals_incident_id", "incident_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_service: Mapped[str] = mapped_column(String(64), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(32), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    requires_human_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    preconditions_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    approval_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ApprovalStatus.PENDING_APPROVAL.value
+    )
+    created_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+    incident: Mapped["Incident"] = relationship(
+        "Incident", back_populates="remediation_proposals"
+    )
+
+
+class IncidentReport(Base):
+    """Persisted structured RCA report separating facts, hypotheses, and unknowns."""
+
+    __tablename__ = "incident_reports"
+    __table_args__ = (Index("ix_incident_reports_incident_id", "incident_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    root_cause_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    unknowns_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    bounded_next_diagnostic: Mapped[str | None] = mapped_column(Text, nullable=True)
+    report_payload_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    created_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="report")
 
 
 class AuditEvent(Base):
