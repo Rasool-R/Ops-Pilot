@@ -21,7 +21,7 @@ OpsPilot is a stateful incident-management and root-cause analysis (RCA) platfor
 ## 4. Repository Structure
 See `docs/architecture.md` for component boundaries and `docs/implementation-plan.md` for phase gates.
 
-## 5. Quick Start (Phase 1 Target)
+## 5. Quick Start
 1. Copy `.env.example` to `.env` and populate local non-production placeholders.
 2. Start infrastructure services (once Phase 1 Compose files are verified).
 3. Run database migrations and test suites via `pytest`.
@@ -29,6 +29,5 @@ See `docs/architecture.md` for component boundaries and `docs/implementation-pla
 ## 6. Documentation Index
 - [Architecture Overview](docs/architecture.md)
 - [Implementation Plan & Roadmap](docs/implementation-plan.md)
-- [Task Board](docs/task-board.md)
 - [Team Collaboration Charter](docs/collaboration.md)
 - [Shared Integration Contracts](docs/integration-contracts.md)
