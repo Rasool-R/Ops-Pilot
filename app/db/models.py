@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for incidents, alerts, RCA artifacts, and audit events."""
+"""SQLAlchemy ORM models for incidents, alerts, RCA artifacts, remediation, and audit."""
 
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -157,6 +157,15 @@ class Incident(Base):
     remediation_proposals: Mapped[list["RemediationProposal"]] = relationship(
         "RemediationProposal", back_populates="incident", cascade="all, delete-orphan"
     )
+    approval_decisions: Mapped[list["ApprovalDecision"]] = relationship(
+        "ApprovalDecision", back_populates="incident", cascade="all, delete-orphan"
+    )
+    action_executions: Mapped[list["ActionExecution"]] = relationship(
+        "ActionExecution", back_populates="incident", cascade="all, delete-orphan"
+    )
+    verification_results: Mapped[list["VerificationResult"]] = relationship(
+        "VerificationResult", back_populates="incident", cascade="all, delete-orphan"
+    )
     report: Mapped["IncidentReport | None"] = relationship(
         "IncidentReport",
         back_populates="incident",
@@ -300,6 +309,90 @@ class RemediationProposal(Base):
 
     incident: Mapped["Incident"] = relationship(
         "Incident", back_populates="remediation_proposals"
+    )
+
+
+class ApprovalDecision(Base):
+    """Human approval or rejection record separated from proposal and execution."""
+
+    __tablename__ = "approval_decisions"
+    __table_args__ = (
+        Index("ix_approval_decisions_incident_id", "incident_id"),
+        Index("ix_approval_decisions_proposal_id", "proposal_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
+    )
+    proposal_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("remediation_proposals.id", ondelete="CASCADE"), nullable=False
+    )
+    approver_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    decided_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    expires_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="approval_decisions")
+
+
+class ActionExecution(Base):
+    """Execution record of an authorized remediation action with idempotency protection."""
+
+    __tablename__ = "action_executions"
+    __table_args__ = (Index("ix_action_executions_incident_id", "incident_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
+    )
+    proposal_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("remediation_proposals.id", ondelete="CASCADE"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_service: Mapped[str] = mapped_column(String(64), nullable=False)
+    parameters_json: Mapped[dict[str, str | int | bool]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    execution_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    output_message: Mapped[str] = mapped_column(Text, nullable=False)
+    rollback_plan: Mapped[str] = mapped_column(Text, nullable=False)
+    executed_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="action_executions")
+
+
+class VerificationResult(Base):
+    """Post-remediation recovery verification record grounded in fresh telemetry."""
+
+    __tablename__ = "verification_results"
+    __table_args__ = (Index("ix_verification_results_incident_id", "incident_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid_str)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False
+    )
+    execution_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("action_executions.id", ondelete="CASCADE"), nullable=False
+    )
+    verification_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    recovered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    observed_5xx_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    observed_pool_wait_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    verified_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+    incident: Mapped["Incident"] = relationship(
+        "Incident", back_populates="verification_results"
     )
 
 

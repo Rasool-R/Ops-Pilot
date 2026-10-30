@@ -17,7 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Apply initial Phase 2 tables, constraints, and indexes."""
+    """Apply initial tables, constraints, and indexes."""
     op.create_table(
         "incidents",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -79,7 +79,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Revert initial Phase 2 tables."""
+    """Revert initial tables."""
     op.drop_index("ix_audit_events_incident_id", table_name="audit_events")
     op.drop_index("ix_audit_events_event_type", table_name="audit_events")
     op.drop_table("audit_events")

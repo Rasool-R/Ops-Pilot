@@ -17,7 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Create Phase 5 investigation persistence tables with idempotency constraints."""
+    """Create investigation persistence tables with idempotency constraints."""
     op.create_table(
         "evidence_records",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -120,7 +120,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop Phase 5 investigation persistence tables."""
+    """Drop investigation persistence tables."""
     op.drop_index("ix_incident_reports_incident_id", table_name="incident_reports")
     op.drop_table("incident_reports")
 
