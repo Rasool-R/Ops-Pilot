@@ -133,6 +133,50 @@ class IncidentRepository:
         self._session.refresh(alert)
         return incident, alert, created_new_incident
 
+    def record_resolved_alert(
+        self,
+        alert_in: NormalizedAlertInput,
+    ) -> tuple[Incident | None, bool]:
+        """Correlate an Alertmanager resolved notification with an active incident."""
+        active_statuses = (
+            IncidentStatus.OPEN.value,
+            IncidentStatus.INVESTIGATING.value,
+            IncidentStatus.MITIGATING.value,
+        )
+        incident = self._session.scalar(
+            select(Incident)
+            .where(
+                Incident.service_id == alert_in.service_id.value,
+                Incident.alert_fingerprint == alert_in.alert_fingerprint,
+                Incident.incident_status.in_(active_statuses),
+            )
+            .order_by(Incident.created_at_utc.desc())
+        )
+        if incident is None:
+            return None, False
+
+        now = datetime.now(UTC)
+        resolved_time = alert_in.ends_at_utc or now
+        for existing_alert in incident.alerts:
+            if existing_alert.ends_at_utc is None:
+                existing_alert.ends_at_utc = resolved_time
+
+        incident.updated_at_utc = now
+        self._session.add(
+            AuditEvent(
+                incident_id=incident.id,
+                event_type="alert.resolved_notification",
+                actor="system.alert_ingestor",
+                details_json={
+                    "alert_fingerprint": alert_in.alert_fingerprint,
+                    "ends_at_utc": resolved_time.isoformat(),
+                },
+            )
+        )
+        self._session.commit()
+        self._session.refresh(incident)
+        return incident, True
+
     def save_investigation_outcome(
         self,
         incident_id: str,
