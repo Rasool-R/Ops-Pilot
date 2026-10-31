@@ -1,8 +1,9 @@
-"""FastAPI application entrypoint for OpsPilot (Owned by Developer A)."""
+"""FastAPI application entrypoint for OpsPilot."""
 
 from fastapi import FastAPI
 
 from app import __version__
+from app.api.alerts import router as alerts_router
 from app.api.approvals import router as approvals_router
 from app.api.health import router as health_router
 from app.api.incidents import router as incidents_router
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
         description="Stateful Agentic AIOps Platform for RCA and Controlled Remediation",
     )
     application.include_router(health_router, prefix=settings.API_V1_STR)
+    application.include_router(alerts_router, prefix=settings.API_V1_STR)
     application.include_router(incidents_router, prefix=settings.API_V1_STR)
     application.include_router(approvals_router, prefix=settings.API_V1_STR)
     return application
