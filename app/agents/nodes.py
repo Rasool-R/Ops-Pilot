@@ -16,6 +16,7 @@ from app.db.models import InvestigationStatus, ServiceId
 from app.integrations.telemetry import MetricName, TelemetryAdapter
 from app.tools.logs import query_service_logs
 from app.tools.metrics import query_service_metrics
+from app.tools.runbooks import retrieve_runbooks
 
 
 def normalize_incident_node(state: InvestigationState) -> InvestigationState:
@@ -112,7 +113,6 @@ def formulate_hypotheses_node(state: InvestigationState) -> InvestigationState:
 
     supporting_ids = [f.fact_id for f in state.observed_facts]
 
-    # Hypothesis 1: Database connection pool saturation downstream
     state.hypotheses.append(
         Hypothesis(
             hypothesis_id="hyp-db-pool-exhaustion",
@@ -127,7 +127,6 @@ def formulate_hypotheses_node(state: InvestigationState) -> InvestigationState:
         )
     )
 
-    # Hypothesis 2: Downstream payment-service degradation
     state.hypotheses.append(
         Hypothesis(
             hypothesis_id="hyp-payment-service-degradation",
@@ -139,7 +138,6 @@ def formulate_hypotheses_node(state: InvestigationState) -> InvestigationState:
         )
     )
 
-    # Plan targeted bounded diagnostics to test both hypotheses
     state.diagnostics_Queue.extend(
         [
             DiagnosticStep(
@@ -272,13 +270,25 @@ def reassess_evidence_node(state: InvestigationState) -> InvestigationState:
 
 
 def produce_rca_report_node(state: InvestigationState) -> InvestigationState:
-    """Synthesize final RCA report with strict epistemic separation and uncertainty handling."""
+    """Synthesize final RCA report citing approved runbooks and disclosing retrieval gaps."""
     state.step_count += 1
     supported = [h for h in state.hypotheses if h.status == HypothesisStatus.SUPPORTED]
+
+    rb_result = retrieve_runbooks(
+        service_id=state.primary_service,
+        query="connection pool exhaustion 5xx latency",
+    )
+    automatable_matches = [m for m in rb_result.matches if not m.human_only]
+    citations = [f"{m.runbook_id} ({m.source_path})" for m in rb_result.matches]
+    gaps: list[str] = []
+    if rb_result.retrieval_gap_disclosed and rb_result.gap_reason:
+        gaps.append(rb_result.gap_reason)
 
     if supported:
         top_hyp = max(supported, key=lambda h: h.confidence)
         state.investigation_status = InvestigationStatus.COMPLETED
+        primary_rb = automatable_matches[0] if automatable_matches else None
+
         state.recommendations.append(
             RemediationRecommendation(
                 action_type="reset_db_connection_pool",
@@ -286,13 +296,15 @@ def produce_rca_report_node(state: InvestigationState) -> InvestigationState:
                 risk_level=RiskLevel.MEDIUM,
                 rationale=(
                     "Drain and reinitialize saturated PostgreSQL connection pool on "
-                    "order-service to clear stalled sessions and restore checkout availability."
+                    "order-service per approved runbook procedure."
                 ),
                 requires_human_approval=True,
                 preconditions=[
                     "Verify pg_stat_activity_active_connections >= 95",
                     "Confirm human operator approval is active and unexpired",
                 ],
+                cited_runbook_id=primary_rb.runbook_id if primary_rb else None,
+                cited_runbook_path=primary_rb.source_path if primary_rb else None,
             )
         )
         state.final_report = RCAReport(
@@ -306,6 +318,8 @@ def produce_rca_report_node(state: InvestigationState) -> InvestigationState:
             recommendations=state.recommendations,
             unknowns_and_uncertainties=state.unknowns,
             bounded_next_diagnostic=None,
+            runbook_citations=citations,
+            retrieval_gaps=gaps,
         )
     else:
         state.investigation_status = InvestigationStatus.INCONCLUSIVE
@@ -324,7 +338,7 @@ def produce_rca_report_node(state: InvestigationState) -> InvestigationState:
             incident_id=state.incident_id,
             status="INCONCLUSIVE",
             root_cause_summary=(
-                "Insufficient orhealthy telemetry evidence to confirm a definitive root cause."
+                "Insufficient or healthy telemetry evidence to confirm a definitive root cause."
             ),
             confidence=0.25,
             observed_facts=state.observed_facts,
@@ -333,6 +347,8 @@ def produce_rca_report_node(state: InvestigationState) -> InvestigationState:
             recommendations=[],
             unknowns_and_uncertainties=state.unknowns,
             bounded_next_diagnostic=state.bounded_next_diagnostic,
+            runbook_citations=citations,
+            retrieval_gaps=gaps,
         )
 
     return state
