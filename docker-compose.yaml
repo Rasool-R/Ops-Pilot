@@ -25,6 +25,83 @@ services:
           cpus: "1.0"
           memory: 512M
 
+  ecomm-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opspilot-simulator
+    restart: unless-stopped
+    command: ["uvicorn", "app.simulator.service:simulator_app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "127.0.0.1:8001:8001"
+    networks:
+      - opspilot_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: opspilot-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=24h"
+      - "--web.enable-lifecycle"
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    depends_on:
+      ecomm-simulator:
+        condition: service_healthy
+    networks:
+      - opspilot_net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: opspilot-alertmanager
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - opspilot_net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
   opspilot-app:
     build:
       context: .
@@ -37,12 +114,16 @@ services:
       APP_PORT: 8000
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-opspilot_user}:${POSTGRES_PASSWORD:-local_dev_password}@postgres:5432/${POSTGRES_DB:-opspilot_db}
+      PROMETHEUS_BASE_URL: http://prometheus:9090
+      ALERTMANAGER_BASE_URL: http://alertmanager:9093
       USE_MOCK_TELEMETRY: ${USE_MOCK_TELEMETRY:-true}
       REMEDIATION_DRY_RUN_ONLY: ${REMEDIATION_DRY_RUN_ONLY:-true}
     ports:
       - "127.0.0.1:${APP_PORT:-8000}:8000"
     depends_on:
       postgres:
+        condition: service_healthy
+      ecomm-simulator:
         condition: service_healthy
     networks:
       - opspilot_net
