@@ -1,0 +1,16 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "service_id"]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 15m
+  receiver: "opspilot-webhook"
+
+receivers:
+  - name: "opspilot-webhook"
+    webhook_configs:
+      - url: "http://opspilot-app:8000/api/v1/alerts/webhook"
+        send_resolved: true
+        max_alerts: 20
