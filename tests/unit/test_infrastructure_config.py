@@ -24,7 +24,7 @@ def test_docker_compose_defines_postgres_healthcheck_and_limits() -> None:
     if not compose_path.exists():
         compose_path = PROJECT_ROOT / "docker-compose.yaml"
     
-    assert compose_path.exists(), "docker-compose.yml or docker-compose.yaml must exist in project root"
+    assert compose_path.exists(), "docker-compose file must exist in project root"
 
     content = compose_path.read_text(encoding="utf-8")
     assert "postgres:16-alpine" in content
