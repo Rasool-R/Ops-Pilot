@@ -1,9 +1,10 @@
-"""FastAPI endpoints for incident ingestion, paginated history, and RCA inspection."""
+"""FastAPI endpoints for incident ingestion, paginated history, RCA report, and UI."""
 
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -11,6 +12,11 @@ from app.db.models import Incident
 from app.db.repository import IncidentRepository, NormalizedAlertInput
 from app.db.session import get_db
 from app.services.incident_service import IncidentService
+from app.services.report_service import (
+    IncidentLifecycleView,
+    ReportService,
+    get_incident_report_payload,
+)
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -169,3 +175,58 @@ def investigate_or_resume_endpoint(
             detail=str(exc),
         ) from exc
     return _to_detail(incident)
+
+
+@router.get("/{incident_id}/lifecycle", response_model=IncidentLifecycleView)
+def get_incident_lifecycle_endpoint(
+    incident_id: str,
+    db: DbSessionDep,
+) -> IncidentLifecycleView:
+    """Return the complete end-to-end incident lifecycle, timelines, and dashboard links."""
+    report_service = ReportService(session=db)
+    try:
+        return report_service.get_lifecycle_view(incident_id=incident_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/{incident_id}/report")
+def get_incident_report_endpoint(
+    incident_id: str,
+    db: DbSessionDep,
+) -> dict[str, object]:
+    """Retrieve the full structured RCA report for an incident."""
+    repo = IncidentRepository(db)
+    incident = repo.get_incident_by_id(incident_id)
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident '{incident_id}' not found",
+        )
+    payload = get_incident_report_payload(incident)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"RCA report for incident '{incident_id}' is not generated yet",
+        )
+    return payload
+
+
+@router.get("/{incident_id}/ui", response_class=HTMLResponse)
+def get_incident_ui_endpoint(
+    incident_id: str,
+    db: DbSessionDep,
+) -> HTMLResponse:
+    """Render the operator HTML dashboard for end-to-end incident lifecycle inspection."""
+    report_service = ReportService(session=db)
+    try:
+        html_content = report_service.render_incident_html(incident_id=incident_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return HTMLResponse(content=html_content, status_code=status.HTTP_200_OK)
