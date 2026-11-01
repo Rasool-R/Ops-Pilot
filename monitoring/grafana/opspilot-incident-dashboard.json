@@ -1,0 +1,57 @@
+{
+  "title": "OpsPilot — E-Commerce & PostgreSQL Pool Telemetry",
+  "uid": "opspilot-mvp-telemetry",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP 5xx Error Rate by Service",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "http_requests_5xx_rate",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP p95 Latency (ms)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "http_request_latency_p95",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "PostgreSQL Active Connections",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "pg_stat_activity_active_connections",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "PostgreSQL Connection Pool Wait Time (ms)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "pg_pool_wait_time_ms",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    }
+  ]
+}
