@@ -28,7 +28,7 @@ def test_alert_rules_align_with_shared_telemetry_contracts() -> None:
     rules_path = MONITORING_DIR / "alert_rules.yml"
     
     if not rules_path.exists():
-        rules_path = MONITORING_DIR / "alert-rules.yaml"
+        rules_path = MONITORING_DIR / "alert_rules.yaml"
 
     assert rules_path.exists(), "monitoring/alert_rules file must exist"
 
