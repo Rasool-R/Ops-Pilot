@@ -12,7 +12,9 @@ MONITORING_DIR = PROJECT_ROOT / "monitoring"
 def test_prometheus_config_scrapes_simulator_and_opspilot() -> None:
     """Verify prometheus.yml exists and configures scrape jobs and alertmanager."""
     prom_path = MONITORING_DIR / "prometheus.yml"
-    assert prom_path.exists(), "monitoring/prometheus.yml must exist"
+    if not prom_path.exists():
+        prom_path = MONITORING_DIR / "prometheus.yaml"
+    assert prom_path.exists(), "monitoring/prometheus.yml or prometheus.yaml must exist"
 
     content = prom_path.read_text(encoding="utf-8")
     assert "ecomm-simulator:8001" in content
@@ -24,7 +26,11 @@ def test_prometheus_config_scrapes_simulator_and_opspilot() -> None:
 def test_alert_rules_align_with_shared_telemetry_contracts() -> None:
     """Verify alert_rules.yml uses contract-approved metric names and service IDs."""
     rules_path = MONITORING_DIR / "alert_rules.yml"
-    assert rules_path.exists(), "monitoring/alert_rules.yml must exist"
+    
+    if not rules_path.exists():
+        rules_path = MONITORING_DIR / "alert-rules.yaml"
+
+    assert rules_path.exists(), "monitoring/alert_rules.yml or alert_rules.yaml must exist"
 
     content = rules_path.read_text(encoding="utf-8")
     assert MetricName.HTTP_5XX_RATE.value in content
@@ -38,7 +44,11 @@ def test_alert_rules_align_with_shared_telemetry_contracts() -> None:
 def test_alertmanager_config_routes_to_opspilot_webhook() -> None:
     """Verify alertmanager.yml routes notifications to OpsPilot webhook with bounds."""
     am_path = MONITORING_DIR / "alertmanager.yml"
-    assert am_path.exists(), "monitoring/alertmanager.yml must exist"
+    
+    if not am_path.exists():
+        am_path = MONITORING_DIR / "alertmanager.yaml"
+
+    assert am_path.exists(), "monitoring/alertmanager.yml or alertmanager.yaml must exist"
 
     content = am_path.read_text(encoding="utf-8")
     assert "http://opspilot-app:8000/api/v1/alerts/webhook" in content
