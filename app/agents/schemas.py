@@ -66,7 +66,7 @@ class DiagnosticStep(BaseModel):
 
 
 class RemediationRecommendation(BaseModel):
-    """Predefined remediation proposal (never self-authorized by the agent)."""
+    """Predefined remediation proposal citing approved runbook procedures."""
 
     action_type: Literal["reset_db_connection_pool", "restart_service_container"]
     target_service: ServiceId
@@ -74,6 +74,8 @@ class RemediationRecommendation(BaseModel):
     rationale: str
     requires_human_approval: bool = True
     preconditions: list[str] = Field(default_factory=list)
+    cited_runbook_id: str | None = None
+    cited_runbook_path: str | None = None
 
 
 class RCAReport(BaseModel):
@@ -89,3 +91,5 @@ class RCAReport(BaseModel):
     recommendations: list[RemediationRecommendation] = Field(default_factory=list)
     unknowns_and_uncertainties: list[str] = Field(default_factory=list)
     bounded_next_diagnostic: str | None = None
+    runbook_citations: list[str] = Field(default_factory=list)
+    retrieval_gaps: list[str] = Field(default_factory=list)
